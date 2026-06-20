@@ -60,29 +60,27 @@ def preparer_donnees(df):
     if "Prix TTC" in df.columns and "Prix HT" in df.columns:
         df["Montant TVA"] = df["Prix TTC"] - df["Prix HT"]
 
-    # VENTE HT
-    if "Quantite" in df.columns and "Prix HT" in df.columns:
-        df["Montant Vente HT"] = df["Quantite"] * df["Prix HT"]
+# VENTE HT
+if "Quantite" in df.columns and "Prix HT" in df.columns:
+    df["Montant Vente HT"] = (
+        df["Quantite"].fillna(0) * df["Prix HT"].fillna(0)
+    )
+else:
+    df["Montant Vente HT"] = 0
 
-    # REDUCTION
-    if "Reduction" in df.columns:
 
-        if df["Reduction"].max() > 1:
-            df["Reduction €"] = df["Montant Vente HT"] * df["Reduction"] / 100
-        else:
-            df["Reduction €"] = df["Reduction"]
-
-        df["Discount"] = df["Reduction"].apply(lambda x: "Oui" if x > 0 else "Non")
-
+# REDUCTION
+if "Reduction" in df.columns:
+    if df["Reduction"].max() > 1:
+        df["Reduction €"] = df["Montant Vente HT"] * df["Reduction"] / 100
     else:
-        df["Reduction €"] = 0
-        df["Discount"] = "Non"
+        df["Reduction €"] = df["Reduction"]
+else:
+    df["Reduction €"] = 0
 
-    # TOTAL
-    df["Montant Total Vente HT"] = df["Montant Vente HT"] - df["Reduction €"]
 
-    # PROFIT
-    if "Cout" in df.columns:
-        df["Profit"] = df["Montant Total Vente HT"] - df["Cout"]
-
-    return df
+# TOTAL (SAFE)
+df["Montant Total Vente HT"] = (
+    df["Montant Vente HT"] - df["Reduction €"]
+)
+st.write(df.columns)
