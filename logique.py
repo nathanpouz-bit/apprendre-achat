@@ -1,72 +1,67 @@
+import streamlit as st
 import pandas as pd
-import re
+import plotly.express as px
+
+from logique import prepare
 
 
-# --------------------------------------------------
-# NORMALISATION
-# --------------------------------------------------
+st.set_page_config(page_title="AI Dashboard", layout="wide")
 
-def clean(col):
-    return re.sub(r'[^a-z0-9]', '', col.lower())
+st.title("🤖 Dashboard intelligent")
 
+file = st.file_uploader("Upload Excel", type=["xlsx"])
 
-# --------------------------------------------------
-# DETECTION AUTOMATIQUE
-# --------------------------------------------------
+query = st.text_input("💬 Décris ton analyse (ex: analyse mes ventes, par produit, par pays)")
 
-def detect(df):
+if file:
 
-    cols = {clean(c): c for c in df.columns}
+    df = pd.read_excel(file)
+    df, mapping = prepare(df)
 
-    def find(keys):
-        for k in keys:
-            if k in cols:
-                return cols[k]
-        return None
+    st.success("Données prêtes")
 
-    return {
-        "date": find(["date", "jour"]),
-        "ca": find(["ca", "sales", "revenue"]),
-        "qty": find(["quantity", "quantite", "qty"]),
-        "price": find(["prixht", "price", "unitprice"]),
-        "cost": find(["cost", "cout"]),
-        "country": find(["pays", "country"]),
-        "product": find(["product", "produit"]),
-    }
+    # -----------------------------
+    # KPIs toujours affichés
+    # -----------------------------
+    st.subheader("KPIs")
+    col1, col2, col3 = st.columns(3)
 
+    col1.metric("CA", f"{df['CA'].sum():,.0f}")
+    col2.metric("Profit", f"{df['Profit'].sum():,.0f}")
+    col3.metric("Lignes", len(df))
 
-# --------------------------------------------------
-# PREPARATION DATA
-# --------------------------------------------------
+    # -----------------------------
+    # ANALYSE TEXTE
+    # -----------------------------
 
-def prepare(df):
+    q = query.lower()
 
-    df = df.copy()
-    m = detect(df)
+    st.subheader("📊 Analyse automatique")
 
-    # DATE
-    if m["date"]:
-        df["Date"] = pd.to_datetime(df[m["date"]], errors="coerce")
+    # 1. PAR PRODUIT
+    if "produit" in q or "product" in q:
 
-    # CA direct
-    if m["ca"]:
-        df["CA"] = pd.to_numeric(df[m["ca"]], errors="coerce")
-    else:
-        if m["qty"] and m["price"]:
-            df["CA"] = (
-                pd.to_numeric(df[m["qty"]], errors="coerce").fillna(0)
-                * pd.to_numeric(df[m["price"]], errors="coerce").fillna(0)
-            )
-        else:
-            df["CA"] = 0
+        if "product" in mapping and mapping["product"]:
 
-    # COST
-    if m["cost"]:
-        df["Cost"] = pd.to_numeric(df[m["cost"]], errors="coerce")
-    else:
-        df["Cost"] = 0
+            data = df.groupby(mapping["product"])["CA"].sum().reset_index()
 
-    # PROFIT
-    df["Profit"] = df["CA"] - df["Cost"]
+            fig = px.pie(data, values="CA", names=mapping["product"], title="CA par produit")
+            st.plotly_chart(fig, use_container_width=True)
 
-    return df, m
+    # 2. PAR PAYS
+    if "pays" in q or "country" in q:
+
+        if "country" in mapping and mapping["country"]:
+
+            data = df.groupby(mapping["country"])["CA"].sum().reset_index()
+
+            fig = px.bar(data, x=mapping["country"], y="CA", title="CA par pays")
+            st.plotly_chart(fig, use_container_width=True)
+
+    # 3. EVOLUTION TEMPS
+    if "date" in df.columns and ("temps" in q or "évolution" in q or "evolution" in q):
+
+        evo = df.groupby("Date")["CA"].sum().reset_index()
+
+        fig = px.line(evo, x="Date", y="CA", title="Évolution du CA")
+        st.plotly_chart(fig, use_container_width=True)
