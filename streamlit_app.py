@@ -17,7 +17,47 @@ except FileNotFoundError:
     print(f"Erreur : Le fichier '{excel_file_path}' n'a pas été trouvé. Veuillez vérifier le chemin.")
 except Exception as e:
     print(f"Une erreur est survenue lors du chargement du fichier Excel : {e}")
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import re
 
+st.set_page_config(page_title="Dashboard Intelligent", layout="wide")
+st.title("📊 Dashboard Intelligent (auto-adaptatif)")
+
+uploaded_file = st.file_uploader("Upload Excel", type=["xlsx"])
+
+# ----------------------------
+# NORMALISATION
+# ----------------------------
+def normalize(col):
+    return re.sub(r'[^a-zA-Z0-9]', '', col.lower())
+
+mapping = {
+    "chiffredaffaires": "CA",
+    "ca": "CA",
+    "sales": "CA",
+    "revenue": "CA",
+
+    "profit": "Profit",
+    "benefice": "Profit",
+    "margin": "Profit",
+
+    "cost": "Cost",
+    "costs": "Cost",
+    "expenses": "Cost",
+    "achat": "Cost",
+    "achats": "Cost",
+
+    "date": "Date",
+    "jour": "Date",
+
+    "pays": "Pays",
+    "country": "Pays",
+
+    "produit": "Produit",
+    "product": "Produit"
+}
 # --- Étapes suivantes (à développer en fonction de vos besoins) ---
 
 # 1. Nettoyage et transformation des données (ex: gestion des valeurs manquantes, conversions de type, création de nouvelles colonnes)
