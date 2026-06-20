@@ -11,92 +11,62 @@ def clean(col):
 
 
 # --------------------------------------------------
-# DETECTION INTELLIGENTE
+# DETECTION AUTOMATIQUE
 # --------------------------------------------------
 
-def detect_columns(df):
+def detect(df):
 
     cols = {clean(c): c for c in df.columns}
 
-    def find(possibilities):
-        for p in possibilities:
-            if p in cols:
-                return cols[p]
+    def find(keys):
+        for k in keys:
+            if k in cols:
+                return cols[k]
         return None
 
     return {
-        "date": find(["date", "jour", "day"]),
-
-        "qty": find(["quantity", "quantite", "qty", "qte"]),
-
-        "prix_ht": find(["prixht", "priceht", "unitprice", "ht"]),
-
-        "prix_ttc": find(["prixttc", "totalprice", "ttc"]),
-
-        "reduction": find(["reduction", "discount", "promo"]),
-
-        "cout": find(["cost", "cout", "costprice"])
+        "date": find(["date", "jour"]),
+        "ca": find(["ca", "sales", "revenue"]),
+        "qty": find(["quantity", "quantite", "qty"]),
+        "price": find(["prixht", "price", "unitprice"]),
+        "cost": find(["cost", "cout"]),
+        "country": find(["pays", "country"]),
+        "product": find(["product", "produit"]),
     }
 
 
 # --------------------------------------------------
-# LOGIQUE PRINCIPALE
+# PREPARATION DATA
 # --------------------------------------------------
 
-def preparer_donnees(df):
+def prepare(df):
 
     df = df.copy()
+    m = detect(df)
 
-    mapping = detect_columns(df)
-
-    # -------------------------
     # DATE
-    # -------------------------
-    if mapping["date"]:
-        df["Date"] = pd.to_datetime(df[mapping["date"]], errors="coerce")
-        df["Annee"] = df["Date"].dt.year
-        df["NumeroMois"] = df["Date"].dt.month
-        df["Mois"] = df["Date"].dt.month_name()
+    if m["date"]:
+        df["Date"] = pd.to_datetime(df[m["date"]], errors="coerce")
 
-    # -------------------------
-    # VENTE HT
-    # -------------------------
-    if mapping["qty"] and mapping["prix_ht"]:
-        df["Quantite"] = pd.to_numeric(df[mapping["qty"]], errors="coerce").fillna(0)
-        df["Prix HT"] = pd.to_numeric(df[mapping["prix_ht"]], errors="coerce").fillna(0)
-
-        df["Montant Vente HT"] = df["Quantite"] * df["Prix HT"]
+    # CA direct
+    if m["ca"]:
+        df["CA"] = pd.to_numeric(df[m["ca"]], errors="coerce")
     else:
-        df["Montant Vente HT"] = 0
-
-    # -------------------------
-    # REDUCTION
-    # -------------------------
-    if mapping["reduction"]:
-
-        r = pd.to_numeric(df[mapping["reduction"]], errors="coerce").fillna(0)
-
-        if r.max() > 1:
-            df["Reduction €"] = df["Montant Vente HT"] * r / 100
+        if m["qty"] and m["price"]:
+            df["CA"] = (
+                pd.to_numeric(df[m["qty"]], errors="coerce").fillna(0)
+                * pd.to_numeric(df[m["price"]], errors="coerce").fillna(0)
+            )
         else:
-            df["Reduction €"] = r
+            df["CA"] = 0
 
-        df["Discount"] = r.apply(lambda x: "Oui" if x > 0 else "Non")
-
+    # COST
+    if m["cost"]:
+        df["Cost"] = pd.to_numeric(df[m["cost"]], errors="coerce")
     else:
-        df["Reduction €"] = 0
-        df["Discount"] = "Non"
+        df["Cost"] = 0
 
-    # -------------------------
-    # TOTAL
-    # -------------------------
-    df["Montant Total Vente HT"] = df["Montant Vente HT"] - df["Reduction €"]
-
-    # -------------------------
     # PROFIT
-    # -------------------------
-    if mapping["cout"]:
-        c = pd.to_numeric(df[mapping["cout"]], errors="coerce").fillna(0)
-        df["Profit"] = df["Montant Total Vente HT"] - c
+    df["Profit"] = df["CA"] - df["Cost"]
 
-    return df
+    return df, m
