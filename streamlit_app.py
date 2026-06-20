@@ -1,85 +1,51 @@
-import streamlit as st
 import pandas as pd
-import plotly.express as px
-
-from logique import prepare
+import re
 
 
-# --------------------------------------------------
-# CONFIG
-# --------------------------------------------------
+def clean(col):
+    return re.sub(r'[^a-z0-9]', '', col.lower())
 
-st.set_page_config(page_title="AI Dashboard", layout="wide")
 
-st.title("🤖 Dashboard Intelligent (No-Code)")
+def detect(df):
 
-file = st.file_uploader("Upload Excel", type=["xlsx"])
+    cols = {clean(c): c for c in df.columns}
 
-command = st.text_input("💬 Tape : analyse mes ventes")
+    def find(keys):
+        for k in keys:
+            if k in cols:
+                return cols[k]
+        return None
 
-# --------------------------------------------------
-# APP
-# --------------------------------------------------
+    return {
+        "date": find(["date"]),
+        "product": find(["product", "produit"]),
+        "country": find(["pays", "country"]),
+        "qty": find(["quantity", "quantite"]),
+        "price": find(["price", "prixht"]),
+        "cost": find(["cost", "cout"])
+    }
 
-if file:
 
-    df = pd.read_excel(file)
+def prepare(df):
 
-    df, mapping = prepare(df)
+    df = df.copy()
+    m = detect(df)
 
-    st.success("Données analysées automatiquement")
+    if m["qty"] and m["price"]:
+        df["CA"] = df[m["qty"]] * df[m["price"]]
+    elif "CA" in df.columns:
+        df["CA"] = df["CA"]
+    else:
+        df["CA"] = 0
 
-    # --------------------------------------------------
-    # MODE IA
-    # --------------------------------------------------
+    if m["cost"]:
+        df["Cost"] = df[m["cost"]]
+    else:
+        df["Cost"] = 0
 
-    if "analyse" in command.lower():
+    df["Profit"] = df["CA"] - df["Cost"]
 
-        st.subheader("📊 KPIs automatiques")
+    if m["date"]:
+        df["Date"] = pd.to_datetime(df[m["date"]], errors="coerce")
 
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("CA Total", f"{df['CA'].sum():,.0f}")
-        col2.metric("Profit", f"{df['Profit'].sum():,.0f}")
-        col3.metric("Lignes", len(df))
-
-        # --------------------------------------------------
-        # GRAPHIQUE 1 : EVOLUTION
-        # --------------------------------------------------
-
-        if "Date" in df.columns:
-
-            evo = df.groupby("Date")[["CA", "Profit"]].sum().reset_index()
-
-            fig = px.line(evo, x="Date", y="CA", title="Évolution CA")
-            st.plotly_chart(fig, use_container_width=True)
-
-        # --------------------------------------------------
-        # GRAPHIQUE 2 : PRODUITS
-        # --------------------------------------------------
-
-        if "product" in mapping and mapping["product"]:
-
-            prod = df.groupby(mapping["product"])["CA"].sum().reset_index()
-
-            fig2 = px.pie(prod, values="CA", names=mapping["product"])
-            st.plotly_chart(fig2, use_container_width=True)
-
-        # --------------------------------------------------
-        # GRAPHIQUE 3 : PAYS
-        # --------------------------------------------------
-
-        if "country" in mapping and mapping["country"]:
-
-            pays = df.groupby(mapping["country"])["CA"].sum().reset_index()
-
-            fig3 = px.bar(pays, x=mapping["country"], y="CA")
-            st.plotly_chart(fig3, use_container_width=True)
-
-    # --------------------------------------------------
-    # TABLE
-    # --------------------------------------------------
-
-    st.subheader("Données")
-
-    st.dataframe(df)
+    return df, m
