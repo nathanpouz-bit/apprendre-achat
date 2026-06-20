@@ -1,51 +1,83 @@
+import streamlit as st
 import pandas as pd
-import re
+import plotly.express as px
+
+from logique_ai import analyser_requete
 
 
-def clean(col):
-    return re.sub(r'[^a-z0-9]', '', col.lower())
+st.set_page_config(page_title="AI Dashboard", layout="wide")
+
+st.title("🤖 Dashboard IA réel")
+
+file = st.file_uploader("Upload Excel", type=["xlsx"])
+
+query = st.text_input("💬 Décris ton analyse")
 
 
-def detect(df):
+if file:
 
-    cols = {clean(c): c for c in df.columns}
+    df = pd.read_excel(file)
 
-    def find(keys):
-        for k in keys:
-            if k in cols:
-                return cols[k]
-        return None
+    st.write("Aperçu :", df.head())
 
-    return {
-        "date": find(["date"]),
-        "product": find(["product", "produit"]),
-        "country": find(["pays", "country"]),
-        "qty": find(["quantity", "quantite"]),
-        "price": find(["price", "prixht"]),
-        "cost": find(["cost", "cout"])
-    }
+    if query:
 
+        plan = analyser_requete(query)
 
-def prepare(df):
+        st.subheader("🧠 Plan généré par l'IA")
+        st.json(plan)
 
-    df = df.copy()
-    m = detect(df)
+        st.subheader("📊 Graphiques")
 
-    if m["qty"] and m["price"]:
-        df["CA"] = df[m["qty"]] * df[m["price"]]
-    elif "CA" in df.columns:
-        df["CA"] = df["CA"]
-    else:
-        df["CA"] = 0
+        for chart in plan["charts"]:
 
-    if m["cost"]:
-        df["Cost"] = df[m["cost"]]
-    else:
-        df["Cost"] = 0
+            chart_type = chart["type"]
 
-    df["Profit"] = df["CA"] - df["Cost"]
+            # --------------------------
+            # BAR / GROUPBY
+            # --------------------------
+            if chart_type == "bar":
 
-    if m["date"]:
-        df["Date"] = pd.to_datetime(df[m["date"]], errors="coerce")
+                data = df.groupby(chart["groupby"]).sum(numeric_only=True).reset_index()
 
-    return df, m
+                fig = px.bar(
+                    data,
+                    x=chart["groupby"],
+                    y=data.columns[-1]
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+            # --------------------------
+            # LINE
+            # --------------------------
+            if chart_type == "line":
+
+                data = df.copy()
+
+                data[chart["x"]] = pd.to_datetime(data[chart["x"]], errors="coerce")
+
+                data = data.groupby(chart["x"]).sum(numeric_only=True).reset_index()
+
+                fig = px.line(
+                    data,
+                    x=chart["x"],
+                    y=data.columns[-1]
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+            # --------------------------
+            # PIE
+            # --------------------------
+            if chart_type == "pie":
+
+                data = df.groupby(chart["groupby"]).sum(numeric_only=True).reset_index()
+
+                fig = px.pie(
+                    data,
+                    names=chart["groupby"],
+                    values=data.columns[-1]
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
