@@ -3,7 +3,7 @@ import re
 
 
 # --------------------------------------------------
-# NORMALISATION COLONNES
+# NORMALISATION
 # --------------------------------------------------
 
 def normaliser(col):
@@ -42,45 +42,69 @@ def renommer_colonnes(df):
 
 
 # --------------------------------------------------
-# LOGIQUE METIER
+# LOGIQUE PRINCIPALE (SAFE)
 # --------------------------------------------------
 
 def preparer_donnees(df):
 
+    # sécurité : on copie
+    df = df.copy()
+
+    # rename
     df = renommer_colonnes(df)
 
+    # --------------------------------------------------
     # DATE
+    # --------------------------------------------------
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df["Annee"] = df["Date"].dt.year
         df["NumeroMois"] = df["Date"].dt.month
         df["Mois"] = df["Date"].dt.month_name()
 
-    # TVA
-    if "Prix TTC" in df.columns and "Prix HT" in df.columns:
-        df["Montant TVA"] = df["Prix TTC"] - df["Prix HT"]
-
-# VENTE HT
-if "Quantite" in df.columns and "Prix HT" in df.columns:
-    df["Montant Vente HT"] = (
-        df["Quantite"].fillna(0) * df["Prix HT"].fillna(0)
-    )
-else:
-    df["Montant Vente HT"] = 0
-
-
-# REDUCTION
-if "Reduction" in df.columns:
-    if df["Reduction"].max() > 1:
-        df["Reduction €"] = df["Montant Vente HT"] * df["Reduction"] / 100
+    # --------------------------------------------------
+    # VENTE HT (SAFE)
+    # --------------------------------------------------
+    if "Quantite" in df.columns and "Prix HT" in df.columns:
+        df["Montant Vente HT"] = (
+            df["Quantite"].fillna(0) * df["Prix HT"].fillna(0)
+        )
     else:
-        df["Reduction €"] = df["Reduction"]
-else:
-    df["Reduction €"] = 0
+        df["Montant Vente HT"] = 0
 
+    # --------------------------------------------------
+    # REDUCTION SAFE
+    # --------------------------------------------------
+    if "Reduction" in df.columns:
 
-# TOTAL (SAFE)
-df["Montant Total Vente HT"] = (
-    df["Montant Vente HT"] - df["Reduction €"]
-)
-st.write(df.columns)
+        max_val = df["Reduction"].max()
+
+        if pd.notna(max_val) and max_val > 1:
+            df["Reduction €"] = df["Montant Vente HT"] * df["Reduction"] / 100
+        else:
+            df["Reduction €"] = df["Reduction"].fillna(0)
+
+        df["Discount"] = df["Reduction"].apply(
+            lambda x: "Oui" if x > 0 else "Non"
+        )
+
+    else:
+        df["Reduction €"] = 0
+        df["Discount"] = "Non"
+
+    # --------------------------------------------------
+    # TOTAL SAFE
+    # --------------------------------------------------
+    df["Montant Total Vente HT"] = (
+        df["Montant Vente HT"] - df["Reduction €"]
+    )
+
+    # --------------------------------------------------
+    # PROFIT SAFE
+    # --------------------------------------------------
+    if "Cout" in df.columns:
+        df["Profit"] = (
+            df["Montant Total Vente HT"] - df["Cout"].fillna(0)
+        )
+
+    return df
