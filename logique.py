@@ -6,105 +6,97 @@ import re
 # NORMALISATION
 # --------------------------------------------------
 
-def normaliser(col):
-    return re.sub(r'[^a-zA-Z0-9]', '', col.lower())
-
-
-def renommer_colonnes(df):
-
-    mapping = {
-        "date": "Date",
-
-        "quantity": "Quantite",
-        "quantite": "Quantite",
-        "qty": "Quantite",
-
-        "prixht": "Prix HT",
-        "priceht": "Prix HT",
-
-        "prixttc": "Prix TTC",
-
-        "reduction": "Reduction",
-        "discount": "Reduction",
-
-        "cost": "Cout",
-        "cout": "Cout"
-    }
-
-    new_cols = {}
-
-    for col in df.columns:
-        key = normaliser(col)
-        if key in mapping:
-            new_cols[col] = mapping[key]
-
-    return df.rename(columns=new_cols)
+def clean(col):
+    return re.sub(r'[^a-z0-9]', '', col.lower())
 
 
 # --------------------------------------------------
-# LOGIQUE PRINCIPALE (SAFE)
+# DETECTION INTELLIGENTE
+# --------------------------------------------------
+
+def detect_columns(df):
+
+    cols = {clean(c): c for c in df.columns}
+
+    def find(possibilities):
+        for p in possibilities:
+            if p in cols:
+                return cols[p]
+        return None
+
+    return {
+        "date": find(["date", "jour", "day"]),
+
+        "qty": find(["quantity", "quantite", "qty", "qte"]),
+
+        "prix_ht": find(["prixht", "priceht", "unitprice", "ht"]),
+
+        "prix_ttc": find(["prixttc", "totalprice", "ttc"]),
+
+        "reduction": find(["reduction", "discount", "promo"]),
+
+        "cout": find(["cost", "cout", "costprice"])
+    }
+
+
+# --------------------------------------------------
+# LOGIQUE PRINCIPALE
 # --------------------------------------------------
 
 def preparer_donnees(df):
 
-    # sécurité : on copie
     df = df.copy()
 
-    # rename
-    df = renommer_colonnes(df)
+    mapping = detect_columns(df)
 
-    # --------------------------------------------------
+    # -------------------------
     # DATE
-    # --------------------------------------------------
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    # -------------------------
+    if mapping["date"]:
+        df["Date"] = pd.to_datetime(df[mapping["date"]], errors="coerce")
         df["Annee"] = df["Date"].dt.year
         df["NumeroMois"] = df["Date"].dt.month
         df["Mois"] = df["Date"].dt.month_name()
 
-    # --------------------------------------------------
-    # VENTE HT (SAFE)
-    # --------------------------------------------------
-    if "Quantite" in df.columns and "Prix HT" in df.columns:
-        df["Montant Vente HT"] = (
-            df["Quantite"].fillna(0) * df["Prix HT"].fillna(0)
-        )
+    # -------------------------
+    # VENTE HT
+    # -------------------------
+    if mapping["qty"] and mapping["prix_ht"]:
+        df["Quantite"] = pd.to_numeric(df[mapping["qty"]], errors="coerce").fillna(0)
+        df["Prix HT"] = pd.to_numeric(df[mapping["prix_ht"]], errors="coerce").fillna(0)
+
+        df["Montant Vente HT"] = df["Quantite"] * df["Prix HT"]
     else:
         df["Montant Vente HT"] = 0
 
-    # --------------------------------------------------
-    # REDUCTION SAFE
-    # --------------------------------------------------
-    if "Reduction" in df.columns:
+    # -------------------------
+    # REDUCTION
+    # -------------------------
+    if mapping["reduction"]:
 
-        max_val = df["Reduction"].max()
+        r = pd.to_numeric(df[mapping["reduction"]], errors="coerce").fillna(0)
 
-        if pd.notna(max_val) and max_val > 1:
-            df["Reduction €"] = df["Montant Vente HT"] * df["Reduction"] / 100
+        if r.max() > 1:
+            df["Reduction €"] = df["Montant Vente HT"] * r / 100
         else:
-            df["Reduction €"] = df["Reduction"].fillna(0)
+            df["Reduction €"] = r
 
-        df["Discount"] = df["Reduction"].apply(
-            lambda x: "Oui" if x > 0 else "Non"
-        )
+        df["Discount"] = r.apply(lambda x: "Oui" if x > 0 else "Non")
 
     else:
         df["Reduction €"] = 0
         df["Discount"] = "Non"
 
-    # --------------------------------------------------
-    # TOTAL SAFE
-    # --------------------------------------------------
-    df["Montant Total Vente HT"] = (
-        df["Montant Vente HT"] - df["Reduction €"]
-    )
+    # -------------------------
+    # TOTAL
+    # -------------------------
+    df["Montant Total Vente HT"] = df["Montant Vente HT"] - df["Reduction €"]
 
-    # --------------------------------------------------
-    # PROFIT SAFE
-    # --------------------------------------------------
-    if "Cout" in df.columns:
-        df["Profit"] = (
-            df["Montant Total Vente HT"] - df["Cout"].fillna(0)
-        )
+    # -------------------------
+    # PROFIT
+    # -------------------------
+    if mapping["cout"]:
+        c = pd.to_numeric(df[mapping["cout"]], errors="coerce").fillna(0)
+        df["Profit"] = df["Montant Total Vente HT"] - c
 
     return df
