@@ -1,70 +1,29 @@
-import streamlit as st
 import pandas as pd
-import plotly.express as px
 
 from logique import preparer_donnees
 
 
-# --------------------------------------------------
-# CONFIG
-# --------------------------------------------------
+st.set_page_config(page_title="Dashboard", layout="wide")
 
-st.set_page_config(page_title="Dashboard Ventes", layout="wide")
-st.title("📊 Dashboard Ventes Intelligent")
+st.title("📊 Dashboard Intelligent")
 
-# --------------------------------------------------
-# UPLOAD
-# --------------------------------------------------
+file = st.file_uploader("Upload Excel", type=["xlsx"])
 
-uploaded_file = st.file_uploader("Upload Excel", type=["xlsx"])
+if file:
 
-if uploaded_file:
+    df = pd.read_excel(file)
 
-    df = pd.read_excel(uploaded_file)
+    st.write("Colonnes originales :", df.columns)
 
     df = preparer_donnees(df)
 
     st.success("Données traitées")
 
-    # --------------------------------------------------
-    # TABLE
-    # --------------------------------------------------
-
-    st.subheader("Données")
     st.dataframe(df)
 
-    # --------------------------------------------------
-    # KPI
-    # --------------------------------------------------
-
-    st.subheader("KPIs")
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        "CA Total",
-        f"{df['Montant Total Vente HT'].sum():,.0f}"
-    )
+    # KPIs SAFE
+    if "Montant Total Vente HT" in df.columns:
+        st.metric("CA Total", df["Montant Total Vente HT"].sum())
 
     if "Profit" in df.columns:
-        col2.metric(
-            "Profit",
-            f"{df['Profit'].sum():,.0f}"
-        )
-
-    col3.metric(
-        "Lignes",
-        len(df)
-    )
-
-    # --------------------------------------------------
-    # GRAPHIQUE
-    # --------------------------------------------------
-
-    if "Mois" in df.columns:
-
-        evo = df.groupby("Mois")["Montant Total Vente HT"].sum().reset_index()
-
-        fig = px.bar(evo, x="Mois", y="Montant Total Vente HT")
-
-        st.plotly_chart(fig, use_container_width=True)
+        st.metric("Profit", df["Profit"].sum())
