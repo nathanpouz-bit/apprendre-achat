@@ -1,82 +1,108 @@
+# streamlit_app.py
+
 import streamlit as st
-import pandas as pd
-import plotly.express as px
 
+from data_loader import load_data
+from dashboard_builder import build_dashboard
 
+# -----------------------------
+# Configuration de la page
+# -----------------------------
 
-st.set_page_config(page_title="AI Dashboard", layout="wide")
+st.set_page_config(
+    page_title="Dashboard Commercial",
+    page_icon="📊",
+    layout="wide"
+)
 
-st.title("🤖 Dashboard IA réel")
+st.title("📊 Dashboard Commercial Automatique")
 
-file = st.file_uploader("Upload Excel", type=["xlsx"])
+st.markdown(
+    """
+    Importez un fichier Excel contenant les colonnes :
 
-query = st.text_input("💬 Décris ton analyse")
+    - Segment
+    - Country
+    - Product
+    - Discount Band
+    - Units Sold
+    - Manufacturing Price
+    - Sale Price
+    - Gross Sales
+    - Discounts
+    - Sales
+    - COGS
+    - Profit
+    - Date
+    - Month Number
+    - Month Name
+    - Year
+    """
+)
 
+# -----------------------------
+# Upload fichier
+# -----------------------------
 
-if file:
+uploaded_file = st.file_uploader(
+    "Choisir un fichier Excel",
+    type=["xlsx"]
+)
 
-    df = pd.read_excel(file)
+if uploaded_file is not None:
 
-    st.write("Aperçu :", df.head())
+    try:
 
-    if query:
+        df = load_data(uploaded_file)
 
-        plan = analyser_requete(query)
+        st.sidebar.header("Filtres")
 
-        st.subheader("🧠 Plan généré par l'IA")
-        st.json(plan)
+        countries = st.sidebar.multiselect(
+            "Pays",
+            options=sorted(df["Country"].unique()),
+            default=sorted(df["Country"].unique())
+        )
 
-        st.subheader("📊 Graphiques")
+        segments = st.sidebar.multiselect(
+            "Segments",
+            options=sorted(df["Segment"].unique()),
+            default=sorted(df["Segment"].unique())
+        )
 
-        for chart in plan["charts"]:
+        years = st.sidebar.multiselect(
+            "Années",
+            options=sorted(df["Year"].unique()),
+            default=sorted(df["Year"].unique())
+        )
 
-            chart_type = chart["type"]
+        products = st.sidebar.multiselect(
+            "Produits",
+            options=sorted(df["Product"].unique()),
+            default=sorted(df["Product"].unique())
+        )
 
-            # --------------------------
-            # BAR / GROUPBY
-            # --------------------------
-            if chart_type == "bar":
+        filtered_df = df[
+            (df["Country"].isin(countries))
+            & (df["Segment"].isin(segments))
+            & (df["Year"].isin(years))
+            & (df["Product"].isin(products))
+        ]
 
-                data = df.groupby(chart["groupby"]).sum(numeric_only=True).reset_index()
+        build_dashboard(filtered_df)
 
-                fig = px.bar(
-                    data,
-                    x=chart["groupby"],
-                    y=data.columns[-1]
-                )
+        st.divider()
 
-                st.plotly_chart(fig, use_container_width=True)
+        st.subheader("Aperçu des données")
 
-            # --------------------------
-            # LINE
-            # --------------------------
-            if chart_type == "line":
+        st.dataframe(
+            filtered_df,
+            use_container_width=True
+        )
 
-                data = df.copy()
+    except Exception as e:
 
-                data[chart["x"]] = pd.to_datetime(data[chart["x"]], errors="coerce")
+        st.error(f"Erreur : {e}")
 
-                data = data.groupby(chart["x"]).sum(numeric_only=True).reset_index()
+else:
 
-                fig = px.line(
-                    data,
-                    x=chart["x"],
-                    y=data.columns[-1]
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
-
-            # --------------------------
-            # PIE
-            # --------------------------
-            if chart_type == "pie":
-
-                data = df.groupby(chart["groupby"]).sum(numeric_only=True).reset_index()
-
-                fig = px.pie(
-                    data,
-                    names=chart["groupby"],
-                    values=data.columns[-1]
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
+    st.info("Veuillez importer un fichier Excel.")
