@@ -1,41 +1,70 @@
-from openai import OpenAI
-import json
+import streamlit as st
+import pandas as pd
+import plotly.express as px
 
-client = OpenAI()
+st.set_page_config(page_title="Dashboard Commercial", layout="wide")
 
+st.title("📊 Dashboard Commercial")
 
-def analyser_requete(user_text):
-    """
-    ChatGPT transforme le texte en plan de dashboard
-    """
+uploaded_file = st.file_uploader(
+    "Choisir un fichier Excel",
+    type=["xlsx"]
+)
 
-    prompt = f"""
-Tu es un expert data analyst.
+if uploaded_file:
 
-Transforme ce texte en JSON STRICT.
+    df = pd.read_excel(uploaded_file)
 
-Texte utilisateur :
-{user_text}
+    # KPI
+    total_sales = df["Sales"].sum()
+    total_profit = df["Profit"].sum()
+    total_units = df["Units Sold"].sum()
 
-Réponds UNIQUEMENT avec ce format :
+    col1, col2, col3 = st.columns(3)
 
-{{
-  "charts": [
-    {{
-      "type": "bar | line | pie",
-      "x": "colonne",
-      "y": "colonne",
-      "groupby": "colonne"
-    }}
-  ]
-}}
-"""
+    col1.metric("CA Total", f"{total_sales:,.0f} €")
+    col2.metric("Profit Total", f"{total_profit:,.0f} €")
+    col3.metric("Unités Vendues", f"{total_units:,.0f}")
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
+    # Filtres
+    countries = st.multiselect(
+        "Pays",
+        df["Country"].unique(),
+        default=df["Country"].unique()
     )
 
-    return json.loads(response.choices[0].message.content)
+    filtered_df = df[df["Country"].isin(countries)]
+
+    # Ventes par pays
+    sales_country = (
+        filtered_df
+        .groupby("Country")["Sales"]
+        .sum()
+        .reset_index()
+    )
+
+    fig_country = px.bar(
+        sales_country,
+        x="Country",
+        y="Sales",
+        title="Ventes par pays"
+    )
+
+    st.plotly_chart(fig_country, use_container_width=True)
+
+    # Profit par produit
+    profit_product = (
+        filtered_df
+        .groupby("Product")["Profit"]
+        .sum()
+        .reset_index()
+    )
+
+    fig_product = px.pie(
+        profit_product,
+        names="Product",
+        values="Profit",
+        title="Répartition du profit"
+    )
+
+    st.plotly_chart(fig_product, use_container_width=True)
